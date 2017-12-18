@@ -35,16 +35,18 @@ class _CTC(Function):
                   act_lens,
                   minibatch_size,
                   costs)
-        ctx.grads = grads
-        ctx.costs = costs
+        ctx.grads = Variable(grads)
+        if is_cuda:
+            ctx.costs = costs.cuda()
+        else:
+            ctx.costs = costs
         return ctx.costs
 
     @staticmethod
     def backward(ctx, grad_output):
-        loss_grads = Variable(ctx.grads)
         if grad_output.is_cuda:
-            loss_grads = loss_grads.cuda()
-        return loss_grads.contiguous() * grad_output.contiguous().view(1, -1, 1), None, None, None
+            ctx.grads = ctx.grads.cuda()
+        return grad_output.contiguous().view(1, -1, 1) * ctx.grads, None, None, None
 
 
 class CTCLoss(Module):
