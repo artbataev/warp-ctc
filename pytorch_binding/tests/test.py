@@ -16,7 +16,10 @@ def run_grads(label_sizes, labels, probs, sizes):
     cost = ctc_loss(probs, labels, sizes, label_sizes)
     cost.backward()
     cpu_cost = cost.data[0]
-    probs = Variable(probs.data.cuda(), requires_grad=True)
+    if torch.cuda.is_available():
+        probs = Variable(probs.data.cuda(), requires_grad=True)
+    else:
+        probs = Variable(probs.data, requires_grad=True)
     cost = ctc_loss(probs, labels, sizes, label_sizes)
     cost.backward()
     gpu_cost = cost.data[0]

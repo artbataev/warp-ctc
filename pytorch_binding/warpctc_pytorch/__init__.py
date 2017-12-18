@@ -1,6 +1,6 @@
 import torch
 import warpctc_pytorch as warp_ctc
-from torch.autograd import Function
+from torch.autograd import Function, Variable
 from torch.nn import Module
 from torch.nn.modules.loss import _assert_no_grad
 from torch.utils.ffi import _wrap_function
@@ -20,7 +20,8 @@ _import_symbols(locals())
 
 
 class _CTC(Function):
-    def forward(self, acts, labels, act_lens, label_lens):
+    @staticmethod
+    def forward(ctx, acts, labels, act_lens, label_lens):
         is_cuda = True if acts.is_cuda else False
         acts = acts.contiguous()
         loss_func = warp_ctc.gpu_ctc if is_cuda else warp_ctc.cpu_ctc
@@ -34,19 +35,23 @@ class _CTC(Function):
                   act_lens,
                   minibatch_size,
                   costs)
-        self.grads = grads
-        self.costs = torch.FloatTensor([costs.sum()])
-        return self.costs
+        ctx.grads = grads
+        ctx.costs = costs
+        return ctx.costs
 
-    def backward(self, grad_output):
-        return self.grads, None, None, None
+    @staticmethod
+    def backward(ctx, grad_output):
+        loss_grads = Variable(ctx.grads)
+        if grad_output.is_cuda:
+            loss_grads = loss_grads.cuda()
+        return loss_grads.contiguous() * grad_output.contiguous().view(1, -1, 1), None, None, None
 
 
 class CTCLoss(Module):
     def __init__(self):
         super(CTCLoss, self).__init__()
 
-    def forward(self, acts, labels, act_lens, label_lens):
+    def forward(self, acts, labels, act_lens, label_lens, reduce=True):
         """
         acts: Tensor of (seqLength x batch x outputDim) containing output from network
         labels: 1 dimensional Tensor containing all the targets of the batch in one sequence
@@ -57,4 +62,8 @@ class CTCLoss(Module):
         _assert_no_grad(labels)
         _assert_no_grad(act_lens)
         _assert_no_grad(label_lens)
-        return _CTC()(acts, labels, act_lens, label_lens)
+        costs = _CTC.apply(acts, labels, act_lens, label_lens)
+        if reduce:
+            return costs.sum()
+        else:
+            return costs
