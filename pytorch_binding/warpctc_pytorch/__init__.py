@@ -37,7 +37,7 @@ class _CTC(Function):
                   costs)
         ctx.grads = Variable(grads)
         if is_cuda:
-            ctx.costs = costs.cuda()
+            ctx.costs = costs.cuda(acts.get_device())
         else:
             ctx.costs = costs
         return ctx.costs
@@ -45,7 +45,7 @@ class _CTC(Function):
     @staticmethod
     def backward(ctx, grad_output):
         if grad_output.is_cuda:
-            ctx.grads = ctx.grads.cuda()
+            ctx.grads = ctx.grads.cuda(grad_output.get_device())
         return grad_output.contiguous().view(1, -1, 1) * ctx.grads, None, None, None
 
 
